@@ -40,50 +40,49 @@ ext {
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
 
     toolsZipUrl = "https://github.com/boybeak/GradleTest/raw/refs/heads/main/tools.zip"
-
-    download = { url, dstFile ->
-        // 确保目标文件是 File 对象
-        File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
-
-        // 创建目标目录
-        dest.parentFile.mkdirs()
-
-        logInfo "▶ 开始下载: $url"
-        logInfo "  保存路径: ${dest.absolutePath}"
-
-        try {
-            // 创建连接（支持HTTP/HTTPS）
-            def connection = new URL(url).openConnection()
-            connection.connectTimeout = 15000 // 15秒连接超时
-            connection.readTimeout = 30000    // 30秒读取超时
-
-            // 验证响应（检查HTTP 200）
-            def responseCode = connection.responseCode
-            if (responseCode != 200) {
-                throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
-            }
-
-            // 流式写入文件
-            dest.withOutputStream { out ->
-                out << connection.inputStream
-            }
-
-            logSuccess "✓ 下载成功"
-        } catch (Exception e) {
-            logError "⚠ 下载失败: ${e.message}"
-        }
-    }
-    isZipValid = { zipFile ->
-        try {
-            new ZipFile(zipFile).close()
-            return true
-        } catch (IOException ignored) {
-            return false
-        }
-    }
 }
 
-def install(Boolean force = false) {
+def download = { url, dstFile ->
+    // 确保目标文件是 File 对象
+    File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
+
+    // 创建目标目录
+    dest.parentFile.mkdirs()
+
+    logInfo "开始下载: $url"
+    logInfo "保存路径: ${dest.absolutePath}"
+
+    try {
+        // 创建连接（支持HTTP/HTTPS）
+        def connection = new URL(url).openConnection()
+        connection.connectTimeout = 15000 // 15秒连接超时
+        connection.readTimeout = 30000    // 30秒读取超时
+
+        // 验证响应（检查HTTP 200）
+        def responseCode = connection.responseCode
+        if (responseCode != 200) {
+            throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
+        }
+
+        // 流式写入文件
+        dest.withOutputStream { out ->
+            out << connection.inputStream
+        }
+
+        logSuccess "✅下载成功"
+    } catch (Exception e) {
+        logError "❎下载失败: ${e.message}"
+    }
+}
+def isZipValid = { zipFile ->
+    try {
+        new ZipFile(zipFile).close()
+        return true
+    } catch (IOException ignored) {
+        return false
+    }
+}
+def install = { Boolean force = false ->
     if (force) {
         if (preCommitFile.exists()) {
             preCommitFile.delete()
@@ -94,6 +93,7 @@ def install(Boolean force = false) {
     }
 
     if (preCommitFile.exists() && resCheckerFile.exists()) {
+        logInfo "已安装CodeQualityTools, 强制更新请执行: ./gradlew forceReinstallCQT"
         return
     }
 
@@ -102,10 +102,15 @@ def install(Boolean force = false) {
     download(toolsZipUrl, tempZip)
 
     if (!tempZip.exists()) {
-        logError("下载目标文件不成功")
+        logError "❎下载目标文件不成功"
+        return
+    }
+    if (!isZipValid(tempZip)) {
+        logError "zip文件损坏"
         return
     }
 
+    logInfo "🔛开始解压到目标路径..."
     project.copy {
         from zipTree(tempZip)
         into(gitRoot)
@@ -113,10 +118,12 @@ def install(Boolean force = false) {
         filesMatching("**/hooks/pre-commit") {
             filter { line ->
                 return line.replace('${PROJECT_NAME}', "PROJECT_NAME=\"${project.name}\"")
-                            .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
+                        .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
             }
         }
     }
+    logSuccess "✅解压成功"
+
     if (preCommitFile.exists()) {
         preCommitFile.setExecutable(true, false)
     }
@@ -125,8 +132,10 @@ def install(Boolean force = false) {
     }
 }
 
-task forceReinstall {
-    install(true)
+task forceReinstallCQT() {
+    doLast {
+        install(true)
+    }
 }
 
 afterEvaluate {
