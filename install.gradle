@@ -1,0 +1,134 @@
+import java.util.zip.ZipFile
+
+// 定义 ANSI 颜色代码
+class Colors {
+    static final String RESET = "\u001B[0m"
+    static final String RED = "\u001B[31m"
+    static final String GREEN = "\u001B[32m"
+    static final String YELLOW = "\u001B[33m"
+    static final String BLUE = "\u001B[34m"
+}
+
+// 将日志方法添加到 extra 属性中，以便在整个脚本中调用
+ext {
+    logInfo = { message ->
+        println "${Colors.BLUE}[INFO] $message${Colors.RESET}"
+    }
+    logSuccess = { message ->
+        println "${Colors.GREEN}[SUCCESS] $message${Colors.RESET}"
+    }
+    logWarning = { message ->
+        println "${Colors.YELLOW}[WARNING] $message${Colors.RESET}"
+    }
+    logError = { message ->
+        println "${Colors.RED}[ERROR] $message${Colors.RESET}"
+    }
+
+    repositoryRoot = {
+        File current = project.projectDir
+        while (current.exists() && !new File(current, ".git").exists()) {
+            current = current.parentFile
+        }
+        if (!current.exists()) {
+            throw new IllegalStateException("No .git found in this project")
+        }
+        return current
+    }
+    gitRoot = new File(repositoryRoot(), ".git")
+    gitHooksDir = new File(gitRoot, "hooks")
+    preCommitFile = new File(gitHooksDir, "pre-commit")
+    resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
+
+    toolsZipUrl = "https://github.com/boybeak/GradleTest/raw/refs/heads/main/tools.zip"
+
+    download = { url, dstFile ->
+        // 确保目标文件是 File 对象
+        File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
+
+        // 创建目标目录
+        dest.parentFile.mkdirs()
+
+        logInfo "▶ 开始下载: $url"
+        logInfo "  保存路径: ${dest.absolutePath}"
+
+        try {
+            // 创建连接（支持HTTP/HTTPS）
+            def connection = new URL(url).openConnection()
+            connection.connectTimeout = 15000 // 15秒连接超时
+            connection.readTimeout = 30000    // 30秒读取超时
+
+            // 验证响应（检查HTTP 200）
+            def responseCode = connection.responseCode
+            if (responseCode != 200) {
+                throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
+            }
+
+            // 流式写入文件
+            dest.withOutputStream { out ->
+                out << connection.inputStream
+            }
+
+            logSuccess "✓ 下载成功"
+        } catch (Exception e) {
+            logError "⚠ 下载失败: ${e.message}"
+        }
+    }
+    isZipValid = { zipFile ->
+        try {
+            new ZipFile(zipFile).close()
+            return true
+        } catch (IOException ignored) {
+            return false
+        }
+    }
+}
+
+def install(Boolean force = false) {
+    if (force) {
+        if (preCommitFile.exists()) {
+            preCommitFile.delete()
+        }
+        if (resCheckerFile.exists()) {
+            resCheckerFile.delete()
+        }
+    }
+
+    if (preCommitFile.exists() && resCheckerFile.exists()) {
+        return
+    }
+
+    File tempZip = File.createTempFile("tools", ".zip")
+
+    download(toolsZipUrl, tempZip)
+
+    if (!tempZip.exists()) {
+        logError("下载目标文件不成功")
+        return
+    }
+
+    project.copy {
+        from zipTree(tempZip)
+        into(gitRoot)
+
+        filesMatching("**/hooks/pre-commit") {
+            filter { line ->
+                return line.replace('${PROJECT_NAME}', "PROJECT_NAME=\"${project.name}\"")
+                            .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
+            }
+        }
+    }
+    if (preCommitFile.exists()) {
+        preCommitFile.setExecutable(true, false)
+    }
+    if (resCheckerFile.exists()) {
+        resCheckerFile.setExecutable(true, false)
+    }
+}
+
+task forceReinstall {
+    install(true)
+}
+
+afterEvaluate {
+    install()
+}

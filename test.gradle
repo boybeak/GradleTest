@@ -1,3 +1,0 @@
-afterEvaluate {
-    println("Hello, Test!!")
-}
