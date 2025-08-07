@@ -113,6 +113,12 @@ def install = { Boolean force = false ->
         return
     }
 
+    def cqtConfig = [:]
+    cqtConfig.sizeMin = parseDimension(project.properties['cqt.sizeMin'], [width: 48, height: 48])
+    cqtConfig.sizeMax = parseDimension(project.properties['cqt.sizeMax'], [width: 1080, height: 1920])
+    cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
+    println("cqtConfig=${cqtConfig}")
+
     logInfo "🔛开始解压到目标路径..."
     project.copy {
         from zipTree(tempZip)
@@ -122,6 +128,9 @@ def install = { Boolean force = false ->
             filter { line ->
                 return line.replace('${PROJECT_NAME}', "PROJECT_NAME=\"${project.name}\"")
                         .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
+                        .replace('${WIDTH_RANGE}', "WIDTH_RANGE=\"${cqtConfig.sizeMin.width} ${cqtConfig.sizeMax.width}\"")
+                        .replace('${HEIGHT_RANGE}', "HEIGHT_RANGE=\"${cqtConfig.sizeMin.height} ${cqtConfig.sizeMax.height}\"")
+                        .replace('${FILE_SIZE_RANGE}', "FILE_SIZE_RANGE=\"${cqtConfig.fileSizeRange.min} ${cqtConfig.fileSizeRange.max}\"")
             }
         }
     }
@@ -151,4 +160,50 @@ task uninstallCQT() {
 
 afterEvaluate {
     install()
+}
+
+// 自定义解析函数：计算表达式字符串的值
+static def computeExpression(String expr) {
+    // 去除所有空格并分割乘数
+    def parts = expr.replaceAll("\\s", "").split("\\*")
+    // 计算结果
+    def result = 1
+    parts.each { num ->
+        result *= num.toInteger()
+    }
+    return result
+}
+
+// 解析尺寸配置（如 "48*48"）
+static def parseDimension(String dimStr, defaultValue) {
+    try {
+        def parts = dimStr.split("\\*")
+        return [
+                width: computeExpression(parts[0]),
+                height: computeExpression(parts[1])
+        ]
+    } catch (Exception e) {
+        return defaultValue
+    }
+}
+
+// 解析文件大小范围（如 "[2 * 1024, 2 * 1024 * 1024]"）
+static def parseFileSizeRange(String rangeStr, defaultValue) {
+    try {
+        // 移除方括号和空格
+        def cleanStr = rangeStr.replaceAll("[\\[\\]\\s]", "")
+        // 分割为两个表达式
+        def expressions = cleanStr.split(",")
+
+        if (expressions.size() != 2) {
+            return defaultValue
+        }
+
+        return [
+                min: computeExpression(expressions[0]),
+                max: computeExpression(expressions[1])
+        ]
+    } catch (Exception e) {
+        return defaultValue
+    }
 }
