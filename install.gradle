@@ -82,14 +82,17 @@ def isZipValid = { zipFile ->
         return false
     }
 }
+def uninstall = {
+    if (preCommitFile.exists()) {
+        preCommitFile.delete()
+    }
+    if (resCheckerFile.exists()) {
+        resCheckerFile.delete()
+    }
+}
 def install = { Boolean force = false ->
     if (force) {
-        if (preCommitFile.exists()) {
-            preCommitFile.delete()
-        }
-        if (resCheckerFile.exists()) {
-            resCheckerFile.delete()
-        }
+        uninstall()
     }
 
     if (preCommitFile.exists() && resCheckerFile.exists()) {
@@ -135,6 +138,14 @@ def install = { Boolean force = false ->
 task forceReinstallCQT() {
     doLast {
         install(true)
+    }
+}
+
+task uninstallCQT() {
+    doLast {
+        logInfo "卸载中..."
+        uninstall()
+        logSuccess "✅卸载成功"
     }
 }
 
