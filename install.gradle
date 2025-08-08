@@ -191,6 +191,8 @@ def install = { Boolean force = false ->
     cqtConfig.sizeMin = parseDimension(project.properties['cqt.sizeMin'], [width: 48, height: 48])
     cqtConfig.sizeMax = parseDimension(project.properties['cqt.sizeMax'], [width: 1080, height: 1920])
     cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
+    cqtConfig.showDialog = project.properties['cqt.showDialog'] == 'true'
+    cqtConfig.openDetektReport = project.properties['cqt.openDetektReport'] == 'true'
 
     logInfo "🔛开始解压到目标路径..."
     project.copy {
@@ -204,6 +206,8 @@ def install = { Boolean force = false ->
                         .replace('${WIDTH_RANGE}', "WIDTH_RANGE=\"${cqtConfig.sizeMin.width} ${cqtConfig.sizeMax.width}\"")
                         .replace('${HEIGHT_RANGE}', "HEIGHT_RANGE=\"${cqtConfig.sizeMin.height} ${cqtConfig.sizeMax.height}\"")
                         .replace('${FILE_SIZE_RANGE}', "FILE_SIZE_RANGE=\"${cqtConfig.fileSizeRange.min} ${cqtConfig.fileSizeRange.max}\"")
+                        .replace('${SHOW_DIALOG}', "SHOW_DIALOG=\"${cqtConfig.showDialog}\"")
+                        .replace('${OPEN_DETEKT_REPORT}', "OPEN_DETEKT_REPORT=\"${cqtConfig.openDetektReport}\"")
             }
         }
     }
