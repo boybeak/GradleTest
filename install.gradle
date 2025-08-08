@@ -38,6 +38,7 @@ ext {
     gitHooksDir = new File(gitRoot, "hooks")
     preCommitFile = new File(gitHooksDir, "pre-commit")
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
+    detektDir = new File(gitRoot, "detekt")
 
     toolsZipUrl = "https://github.com/boybeak/GradleTest/raw/refs/heads/main/tools.zip"
 }
@@ -158,6 +159,9 @@ def uninstall = {
     }
     if (resCheckerFile.exists()) {
         resCheckerFile.delete()
+    }
+    if (detektDir.exists()) {
+        delete detektDir
     }
 }
 def install = { Boolean force = false ->
