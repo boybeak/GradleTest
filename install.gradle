@@ -42,6 +42,24 @@ ext {
     toolsZipUrl = "https://github.com/boybeak/GradleTest/raw/refs/heads/main/tools.zip"
 }
 
+// 格式化字节数为可读格式
+def formatBytes = { bytes ->
+    def units = ['B', 'KB', 'MB', 'GB', 'TB']
+    def unitIndex = 0
+    def size = bytes.toDouble()
+
+    while (size >= 1024 && unitIndex < units.size() - 1) {
+        size /= 1024
+        unitIndex++
+    }
+
+    if (unitIndex == 0) {
+        return "${size.toInt()}${units[unitIndex]}"
+    } else {
+        return "${String.format('%.1f', size)}${units[unitIndex]}"
+    }
+}
+
 def download = { url, dstFile ->
     // 确保目标文件是 File 对象
     File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
@@ -64,16 +82,68 @@ def download = { url, dstFile ->
             throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
         }
 
-        // 流式写入文件
+        // 获取文件总大小
+        def contentLength = connection.contentLength
+        def totalSize = contentLength > 0 ? contentLength : -1
+        def totalSizeStr = totalSize > 0 ? formatBytes(totalSize) : "未知大小"
+
+        // 流式写入文件并显示进度
+        def bufferSize = 8192
+        def buffer = new byte[bufferSize]
+        def bytesRead = 0
+        def totalBytesRead = 0
+        def startTime = System.currentTimeMillis()
+        def lastUpdateTime = startTime
+        def lastBytesRead = 0
+
         dest.withOutputStream { out ->
-            out << connection.inputStream
+            def input = connection.inputStream
+            while ((bytesRead = input.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead)
+                totalBytesRead += bytesRead
+
+                // 每500ms更新一次进度信息
+                def currentTime = System.currentTimeMillis()
+                if (currentTime - lastUpdateTime >= 500) {
+                    def elapsedTime = (currentTime - startTime) / 1000.0
+                    def speed = (totalBytesRead - lastBytesRead) / ((currentTime - lastUpdateTime) / 1000.0)
+
+                    def progressInfo
+                    if (totalSize > 0) {
+                        def progress = (totalBytesRead * 100.0 / totalSize)
+                        def downloadedStr = formatBytes(totalBytesRead)
+                        progressInfo = String.format("\r下载进度: %s/%s (%.1f%%) | 速度: %s/s",
+                                downloadedStr, totalSizeStr, progress, formatBytes(speed))
+                    } else {
+                        def downloadedStr = formatBytes(totalBytesRead)
+                        progressInfo = String.format("\r已下载: %s | 速度: %s/s | 时间: %.1fs",
+                                downloadedStr, formatBytes(speed), elapsedTime)
+                    }
+
+                    // 打印进度信息（不换行）
+                    System.out.print(progressInfo)
+                    System.out.flush()
+
+                    lastUpdateTime = currentTime
+                    lastBytesRead = totalBytesRead
+                }
+            }
+
+            // 下载完成后换行
+            System.out.println()
         }
 
-        logSuccess "✅下载成功"
+        def endTime = System.currentTimeMillis()
+        def totalTime = (endTime - startTime) / 1000.0
+        def averageSpeed = totalBytesRead / totalTime
+
+        logSuccess "✅下载成功 | 总大小: ${formatBytes(totalBytesRead)} | 耗时: ${String.format('%.1f', totalTime)}s | 平均速度: ${formatBytes(averageSpeed)}/s"
     } catch (Exception e) {
+        System.out.println() // 换行避免错误信息覆盖进度信息
         logError "❎下载失败: ${e.message}"
     }
 }
+
 def isZipValid = { zipFile ->
     try {
         new ZipFile(zipFile).close()
@@ -117,7 +187,6 @@ def install = { Boolean force = false ->
     cqtConfig.sizeMin = parseDimension(project.properties['cqt.sizeMin'], [width: 48, height: 48])
     cqtConfig.sizeMax = parseDimension(project.properties['cqt.sizeMax'], [width: 1080, height: 1920])
     cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
-    println("cqtConfig=${cqtConfig}")
 
     logInfo "🔛开始解压到目标路径..."
     project.copy {
