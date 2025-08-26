@@ -1,3 +1,5 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 // 定义 ANSI 颜色代码
@@ -34,209 +36,276 @@ ext {
         }
         return current
     }
+    repositoryRootDir = repositoryRoot()
     gitRoot = new File(repositoryRoot(), ".git")
     gitHooksDir = new File(gitRoot, "hooks")
     preCommitFile = new File(gitHooksDir, "pre-commit")
+    postCommitFile = new File(gitHooksDir, "post-commit")
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
     detektDir = new File(gitRoot, "detekt")
+    baselineFile = new File(detektDir, "baseline.xml")
+    toolsZipFile = new File(gitRoot, "tools.zip")
+    gradlePropertiesFile = new File(project.projectDir, "gradle.properties")
 
     toolsZipUrl = "https://github.com/boybeak/GradleTest/raw/refs/heads/main/tools.zip"
-}
 
-// 格式化字节数为可读格式
-def formatBytes = { bytes ->
-    def units = ['B', 'KB', 'MB', 'GB', 'TB']
-    def unitIndex = 0
-    def size = bytes.toDouble()
+    // 格式化字节数为可读格式
+    def formatBytes = { bytes ->
+        def units = ['B', 'KB', 'MB', 'GB', 'TB']
+        def unitIndex = 0
+        def size = bytes.toDouble()
 
-    while (size >= 1024 && unitIndex < units.size() - 1) {
-        size /= 1024
-        unitIndex++
-    }
-
-    if (unitIndex == 0) {
-        return "${size.toInt()}${units[unitIndex]}"
-    } else {
-        return "${String.format('%.1f', size)}${units[unitIndex]}"
-    }
-}
-
-def download = { url, dstFile ->
-    // 确保目标文件是 File 对象
-    File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
-
-    // 创建目标目录
-    dest.parentFile.mkdirs()
-
-    logInfo "开始下载: $url"
-    logInfo "保存路径: ${dest.absolutePath}"
-
-    try {
-        // 创建连接（支持HTTP/HTTPS）
-        def connection = new URL(url).openConnection()
-        connection.connectTimeout = 15000 // 15秒连接超时
-        connection.readTimeout = 30000    // 30秒读取超时
-
-        // 验证响应（检查HTTP 200）
-        def responseCode = connection.responseCode
-        if (responseCode != 200) {
-            throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
+        while (size >= 1024 && unitIndex < units.size() - 1) {
+            size /= 1024
+            unitIndex++
         }
 
-        // 获取文件总大小
-        def contentLength = connection.contentLength
-        def totalSize = contentLength > 0 ? contentLength : -1
-        def totalSizeStr = totalSize > 0 ? formatBytes(totalSize) : "未知大小"
+        if (unitIndex == 0) {
+            return "${size.toInt()}${units[unitIndex]}"
+        } else {
+            return "${String.format('%.1f', size)}${units[unitIndex]}"
+        }
+    }
 
-        // 流式写入文件并显示进度
-        def bufferSize = 8192
-        def buffer = new byte[bufferSize]
-        def bytesRead = 0
-        def totalBytesRead = 0
-        def startTime = System.currentTimeMillis()
-        def lastUpdateTime = startTime
-        def lastBytesRead = 0
+    download = { url, dstFile ->
+        // 确保目标文件是 File 对象
+        File dest = dstFile instanceof File ? dstFile : new File(dstFile.toString())
 
-        dest.withOutputStream { out ->
-            def input = connection.inputStream
-            while ((bytesRead = input.read(buffer)) != -1) {
-                out.write(buffer, 0, bytesRead)
-                totalBytesRead += bytesRead
+        // 创建目标目录
+        dest.parentFile.mkdirs()
 
-                // 每500ms更新一次进度信息
-                def currentTime = System.currentTimeMillis()
-                if (currentTime - lastUpdateTime >= 500) {
-                    def elapsedTime = (currentTime - startTime) / 1000.0
-                    def speed = (totalBytesRead - lastBytesRead) / ((currentTime - lastUpdateTime) / 1000.0)
+        logInfo "开始下载: $url"
+        logInfo "保存路径: ${dest.absolutePath}"
 
-                    def progressInfo
-                    if (totalSize > 0) {
-                        def progress = (totalBytesRead * 100.0 / totalSize)
-                        def downloadedStr = formatBytes(totalBytesRead)
-                        progressInfo = String.format("\r下载进度: %s/%s (%.1f%%) | 速度: %s/s",
-                                downloadedStr, totalSizeStr, progress, formatBytes(speed))
-                    } else {
-                        def downloadedStr = formatBytes(totalBytesRead)
-                        progressInfo = String.format("\r已下载: %s | 速度: %s/s | 时间: %.1fs",
-                                downloadedStr, formatBytes(speed), elapsedTime)
+        try {
+            // 创建连接（支持HTTP/HTTPS）
+            def connection = new URL(url).openConnection()
+            connection.connectTimeout = 15000 // 15秒连接超时
+            connection.readTimeout = 30000    // 30秒读取超时
+
+            // 验证响应（检查HTTP 200）
+            def responseCode = connection.responseCode
+            if (responseCode != 200) {
+                throw new IOException("HTTP错误: $responseCode - ${connection.responseMessage}")
+            }
+
+            // 获取文件总大小
+            def contentLength = connection.contentLength
+            def totalSize = contentLength > 0 ? contentLength : -1
+            def totalSizeStr = totalSize > 0 ? formatBytes(totalSize) : "未知大小"
+
+            // 流式写入文件并显示进度
+            def bufferSize = 8192
+            def buffer = new byte[bufferSize]
+            def bytesRead = 0
+            def totalBytesRead = 0
+            def startTime = System.currentTimeMillis()
+            def lastUpdateTime = startTime
+            def lastBytesRead = 0
+
+            dest.withOutputStream { out ->
+                def input = connection.inputStream
+                while ((bytesRead = input.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead)
+                    totalBytesRead += bytesRead
+
+                    // 每500ms更新一次进度信息
+                    def currentTime = System.currentTimeMillis()
+                    if (currentTime - lastUpdateTime >= 500) {
+                        def elapsedTime = (currentTime - startTime) / 1000.0
+                        def speed = (totalBytesRead - lastBytesRead) / ((currentTime - lastUpdateTime) / 1000.0)
+
+                        def progressInfo
+                        if (totalSize > 0) {
+                            def progress = (totalBytesRead * 100.0 / totalSize)
+                            def downloadedStr = formatBytes(totalBytesRead)
+                            progressInfo = String.format("\r下载进度: %s/%s (%.1f%%) | 速度: %s/s",
+                                    downloadedStr, totalSizeStr, progress, formatBytes(speed))
+                        } else {
+                            def downloadedStr = formatBytes(totalBytesRead)
+                            progressInfo = String.format("\r已下载: %s | 速度: %s/s | 时间: %.1fs",
+                                    downloadedStr, formatBytes(speed), elapsedTime)
+                        }
+
+                        // 打印进度信息（不换行）
+                        System.out.print(progressInfo)
+                        System.out.flush()
+
+                        lastUpdateTime = currentTime
+                        lastBytesRead = totalBytesRead
                     }
+                }
 
-                    // 打印进度信息（不换行）
-                    System.out.print(progressInfo)
-                    System.out.flush()
+                // 下载完成后换行
+                System.out.println()
+            }
 
-                    lastUpdateTime = currentTime
-                    lastBytesRead = totalBytesRead
+            def endTime = System.currentTimeMillis()
+            def totalTime = (endTime - startTime) / 1000.0
+            def averageSpeed = totalBytesRead / totalTime
+
+            logSuccess "✅下载成功 | 总大小: ${formatBytes(totalBytesRead)} | 耗时: ${String.format('%.1f', totalTime)}s | 平均速度: ${formatBytes(averageSpeed)}/s"
+        } catch (Exception e) {
+            System.out.println() // 换行避免错误信息覆盖进度信息
+            logError "❎下载失败: ${e.message}"
+        }
+    }
+
+    isZipValid = { zipFile ->
+        try {
+            new ZipFile(zipFile).close()
+            return true
+        } catch (IOException ignored) {
+            return false
+        }
+    }
+    uninstallCQT = {
+        if (preCommitFile.exists()) {
+            preCommitFile.delete()
+        }
+        if (resCheckerFile.exists()) {
+            resCheckerFile.delete()
+        }
+        if (detektDir.exists()) {
+            delete detektDir
+        }
+    }
+    isFullInstall = {
+        File detektCli = new File(detektDir, "bin/detekt-cli")
+        File detektConfigYml = new File(detektDir, "config/detekt.yml")
+        File libDir = new File(detektDir, "lib")  // 获取lib目录
+
+        // 检查lib目录下是否存在匹配 detekt-cli-*.jar 的文件
+        boolean hasDetektCliJar = libDir.exists() && libDir.isDirectory() &&
+                libDir.listFiles().any { file ->
+                    file.name.startsWith("detekt-cli-") && file.name.endsWith(".jar")
+                }
+
+        return preCommitFile.exists() && resCheckerFile.exists() && detektDir.exists() &&
+                detektCli.exists() && detektConfigYml.exists() && hasDetektCliJar  // 使用新检查条件
+    }
+    unzipInstall = { zipFile ->
+        def cqtConfig = [:]
+        cqtConfig.sizeMin = parseDimension(project.properties['cqt.sizeMin'], [width: 48, height: 48])
+        cqtConfig.sizeMax = parseDimension(project.properties['cqt.sizeMax'], [width: 1080, height: 1920])
+        cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
+        cqtConfig.showDialog = project.properties['cqt.showDialog'] != 'false'
+        cqtConfig.openDetektReport = project.properties['cqt.openDetektReport'] != 'false'
+
+        project.copy {
+            from zipTree(zipFile)
+            into(gitRoot)
+
+            filesMatching("**/hooks/pre-commit") {
+                filter { line ->
+                    return line.replace('${PROJECT_NAME}', "PROJECT_NAME=\"${project.name}\"")
+                            .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
+                            .replace('${WIDTH_RANGE}', "WIDTH_RANGE=\"${cqtConfig.sizeMin.width} ${cqtConfig.sizeMax.width}\"")
+                            .replace('${HEIGHT_RANGE}', "HEIGHT_RANGE=\"${cqtConfig.sizeMin.height} ${cqtConfig.sizeMax.height}\"")
+                            .replace('${FILE_SIZE_RANGE}', "FILE_SIZE_RANGE=\"${cqtConfig.fileSizeRange.min} ${cqtConfig.fileSizeRange.max}\"")
+                            .replace('${SHOW_DIALOG}', "SHOW_DIALOG=\"${cqtConfig.showDialog}\"")
+                            .replace('${OPEN_DETEKT_REPORT}', "OPEN_DETEKT_REPORT=\"${cqtConfig.openDetektReport}\"")
                 }
             }
-
-            // 下载完成后换行
-            System.out.println()
         }
 
-        def endTime = System.currentTimeMillis()
-        def totalTime = (endTime - startTime) / 1000.0
-        def averageSpeed = totalBytesRead / totalTime
+        logInfo cqtConfig
 
-        logSuccess "✅下载成功 | 总大小: ${formatBytes(totalBytesRead)} | 耗时: ${String.format('%.1f', totalTime)}s | 平均速度: ${formatBytes(averageSpeed)}/s"
-    } catch (Exception e) {
-        System.out.println() // 换行避免错误信息覆盖进度信息
-        logError "❎下载失败: ${e.message}"
+        if (preCommitFile.exists()) {
+            preCommitFile.setExecutable(true, false)
+        }
+        if (postCommitFile.exists()) {
+            postCommitFile.setExecutable(true, false)
+        }
+        if (resCheckerFile.exists()) {
+            resCheckerFile.setExecutable(true, false)
+        }
     }
-}
+    installCQT = { Boolean force = false ->
+        if (force) {
+            uninstallCQT()
+        }
 
-def isZipValid = { zipFile ->
-    try {
-        new ZipFile(zipFile).close()
-        return true
-    } catch (IOException ignored) {
-        return false
-    }
-}
-def uninstall = {
-    if (preCommitFile.exists()) {
-        preCommitFile.delete()
-    }
-    if (resCheckerFile.exists()) {
-        resCheckerFile.delete()
-    }
-    if (detektDir.exists()) {
-        delete detektDir
-    }
-}
-def install = { Boolean force = false ->
-    if (force) {
-        uninstall()
-    }
+        if (isFullInstall()) {
+            logInfo "已安装CodeQualityTools, 强制更新请执行: ./gradlew forceUpdateCQT"
+            return
+        }
 
-    if (preCommitFile.exists() && resCheckerFile.exists()) {
-        logInfo "已安装CodeQualityTools, 强制更新请执行: ./gradlew forceReinstallCQT"
-        return
-    }
+        File tempZip = File.createTempFile("tools", ".zip")
 
-    File tempZip = File.createTempFile("tools", ".zip")
+        download(toolsZipUrl, tempZip)
 
-    download(toolsZipUrl, tempZip)
+        if (!tempZip.exists()) {
+            logError "❎下载目标文件不成功"
+            return
+        }
+        if (!isZipValid(tempZip)) {
+            logError "zip文件损坏"
+            return
+        }
 
-    if (!tempZip.exists()) {
-        logError "❎下载目标文件不成功"
-        return
-    }
-    if (!isZipValid(tempZip)) {
-        logError "zip文件损坏"
-        return
-    }
-
-    def cqtConfig = [:]
-    cqtConfig.sizeMin = parseDimension(project.properties['cqt.sizeMin'], [width: 48, height: 48])
-    cqtConfig.sizeMax = parseDimension(project.properties['cqt.sizeMax'], [width: 1080, height: 1920])
-    cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
-    cqtConfig.showDialog = project.properties['cqt.showDialog'] == 'true'
-    cqtConfig.openDetektReport = project.properties['cqt.openDetektReport'] == 'true'
-
-    logInfo "🔛开始解压到目标路径..."
-    project.copy {
-        from zipTree(tempZip)
-        into(gitRoot)
-
-        filesMatching("**/hooks/pre-commit") {
-            filter { line ->
-                return line.replace('${PROJECT_NAME}', "PROJECT_NAME=\"${project.name}\"")
-                        .replace('${JAVA_HOME}', "JAVA_HOME=\"${System.getProperty("java.home")}\"")
-                        .replace('${WIDTH_RANGE}', "WIDTH_RANGE=\"${cqtConfig.sizeMin.width} ${cqtConfig.sizeMax.width}\"")
-                        .replace('${HEIGHT_RANGE}', "HEIGHT_RANGE=\"${cqtConfig.sizeMin.height} ${cqtConfig.sizeMax.height}\"")
-                        .replace('${FILE_SIZE_RANGE}', "FILE_SIZE_RANGE=\"${cqtConfig.fileSizeRange.min} ${cqtConfig.fileSizeRange.max}\"")
-                        .replace('${SHOW_DIALOG}', "SHOW_DIALOG=\"${cqtConfig.showDialog}\"")
-                        .replace('${OPEN_DETEKT_REPORT}', "OPEN_DETEKT_REPORT=\"${cqtConfig.openDetektReport}\"")
+        logInfo "🔛开始解压到目标路径..."
+        unzipInstall(tempZip)
+        logSuccess "✅安装成功, 开始初始化..."
+        if (!baselineFile.exists()) {
+            exec {
+                workingDir repositoryRootDir.absolutePath
+                commandLine './.git/detekt/bin/detekt-cli',
+                        '--input', "${project.projectDir.absolutePath}/",
+                        '--excludes', '"**/test/**,**/androidTest/**,**/build/**"',
+                        '--config', './.git/detekt/config/detekt.yml',
+                        '--baseline', './.git/detekt/config/baseline.xml',
+                        '--parallel',
+                        '--create-baseline'
             }
         }
-    }
-    logSuccess "✅解压成功"
+        logSuccess "✅初始化成功"
 
-    if (preCommitFile.exists()) {
-        preCommitFile.setExecutable(true, false)
+        Files.copy(tempZip.toPath(), toolsZipFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
-    if (resCheckerFile.exists()) {
-        resCheckerFile.setExecutable(true, false)
+    shouldUpdateConfig = {
+        return gradlePropertiesFile.lastModified() > preCommitFile.lastModified()
     }
 }
 
-task forceReinstallCQT() {
+task forceUpdateCQT() {
     doLast {
-        install(true)
+        installCQT(true)
     }
 }
 
 task uninstallCQT() {
     doLast {
         logInfo "卸载中..."
-        uninstall()
+        uninstallCQT()
         logSuccess "✅卸载成功"
     }
 }
 
+task createBaseline() {
+    doLast {
+        exec {
+            workingDir repositoryRootDir.absolutePath
+            commandLine './.git/detekt/bin/detekt-cli',
+                    '--input', "${project.projectDir.absolutePath}/",
+                    '--excludes', '"**/test/**,**/androidTest/**,**/build/**"',
+                    '--config', './.git/detekt/config/detekt.yml',
+                    '--baseline', './.git/detekt/config/baseline.xml',
+                    '--parallel',
+                    '--create-baseline'
+        }
+    }
+}
+
 afterEvaluate {
-    install()
+    if (isFullInstall() && toolsZipFile.exists() && shouldUpdateConfig()) {
+        logInfo "🔛更新配置中..."
+        uninstallCQT()
+        unzipInstall(toolsZipFile)
+        logInfo "✅更新完成"
+    } else {
+        installCQT()
+    }
 }
 
 // 自定义解析函数：计算表达式字符串的值
