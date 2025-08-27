@@ -261,6 +261,7 @@ ext {
         unzipInstall(tempZip)
         logSuccess "✅安装成功, 开始初始化..."
         if (!baselineFile.exists()) {
+            detektDir.mkdirs()
             exec {
                 workingDir repositoryRootDir.absolutePath
                 commandLine './.git/detekt/bin/detekt-cli',
@@ -272,7 +273,12 @@ ext {
                         '--create-baseline'
             }
         }
-        logSuccess "✅初始化成功"
+        if (baselineFile.exists()) {
+            logSuccess "✅初始化成功"
+        } else {
+            logError "❎初始化失败"
+        }
+
 
         Files.copy(tempZip.toPath(), toolsZipFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
