@@ -43,7 +43,8 @@ ext {
     postCommitFile = new File(gitHooksDir, "post-commit")
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
     detektDir = new File(gitRoot, "detekt")
-    baselineFile = new File(detektDir, "baseline.xml")
+    detektConfigDir= new File(detektDir, "config")
+    baselineFile = new File(detektConfigDir, "baseline.xml")
     toolsZipFile = new File(gitRoot, "tools.zip")
     gradlePropertiesFile = new File(project.projectDir, "gradle.properties")
 
@@ -261,24 +262,25 @@ ext {
         unzipInstall(tempZip)
         logSuccess "✅安装成功, 开始初始化..."
         if (!baselineFile.exists()) {
-            detektDir.mkdirs()
+            detektConfigDir.mkdirs()
             exec {
                 workingDir repositoryRootDir.absolutePath
                 commandLine './.git/detekt/bin/detekt-cli',
                         '--input', "${project.projectDir.absolutePath}/",
                         '--excludes', '"**/test/**,**/androidTest/**,**/build/**"',
                         '--config', './.git/detekt/config/detekt.yml',
-                        '--baseline', './.git/detekt/config/baseline.xml',
+                        '--baseline', "${baselineFile.absolutePath}",
                         '--parallel',
                         '--create-baseline'
+                ignoreExitValue = true
             }
+
         }
         if (baselineFile.exists()) {
             logSuccess "✅初始化成功"
         } else {
             logError "❎初始化失败"
         }
-
 
         Files.copy(tempZip.toPath(), toolsZipFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
