@@ -191,6 +191,7 @@ ext {
         cqtConfig.fileSizeRange = parseFileSizeRange(project.properties['cqt.fileSizeRange'], [min: 2 * 1024, max: 200 * 1024])
         cqtConfig.showDialog = project.properties['cqt.showDialog'] != 'false'
         cqtConfig.openDetektReport = project.properties['cqt.openDetektReport'] != 'false'
+        cqtConfig.customDetektRules = project.properties['cqt.customDetektRules']
 
         project.copy {
             from zipTree(zipFile)
@@ -205,6 +206,18 @@ ext {
                             .replace('${FILE_SIZE_RANGE}', "FILE_SIZE_RANGE=\"${cqtConfig.fileSizeRange.min} ${cqtConfig.fileSizeRange.max}\"")
                             .replace('${SHOW_DIALOG}', "SHOW_DIALOG=\"${cqtConfig.showDialog}\"")
                             .replace('${OPEN_DETEKT_REPORT}', "OPEN_DETEKT_REPORT=\"${cqtConfig.openDetektReport}\"")
+                            .with { str ->
+                                if (cqtConfig.customDetektRules != null) {
+                                    File customRulesFile = new File(project.projectDir, cqtConfig.customDetektRules)
+                                    if (customRulesFile.exists()) {
+                                        str.replace('${CUSTOM_DETEKT_RULES}', "CUSTOM_DETEKT_RULES=\"${customRulesFile.absolutePath}\"")
+                                    } else {
+                                        str
+                                    }
+                                } else {
+                                    str
+                                }
+                            }
                 }
             }
         }
