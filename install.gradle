@@ -42,6 +42,8 @@ ext {
     preCommitFile = new File(gitHooksDir, "pre-commit")
     postCommitFile = new File(gitHooksDir, "post-commit")
     postCheckoutFile = new File(gitHooksDir, "post-checkout")
+    postUpdateFile = new File(gitHooksDir, "post-update")
+    createBaselineFile = new File(gitHooksDir, "create-baseline")
 
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
     detektDir = new File(gitRoot, "detekt")
@@ -172,6 +174,12 @@ ext {
         if (postCheckoutFile.exists()) {
             postCheckoutFile.delete()
         }
+        if (postUpdateFile.exists()) {
+            postUpdateFile.delete()
+        }
+        if (createBaselineFile.exists()) {
+            createBaselineFile.delete()
+        }
         if (resCheckerFile.exists()) {
             resCheckerFile.delete()
         }
@@ -241,6 +249,12 @@ ext {
         }
         if (postCheckoutFile.exists()) {
             postCheckoutFile.setExecutable(true, false)
+        }
+        if (postUpdateFile.exists()) {
+            postUpdateFile.setExecutable(true, false)
+        }
+        if (createBaselineFile.exists()) {
+            createBaselineFile.setExecutable(true, false)
         }
         if (resCheckerFile.exists()) {
             resCheckerFile.setExecutable(true, false)
