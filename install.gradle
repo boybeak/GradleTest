@@ -309,9 +309,9 @@ ext {
             return
         }
 
-        logInfo "🔛开始解压到目标路径..."
+        logInfo "📦开始解压到目标路径..."
         unzipInstall(tempZip)
-        logSuccess "✅安装成功, 开始初始化..."
+        logSuccess "✅安装成功"
 
         Files.copy(tempZip.toPath(), toolsZipFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
