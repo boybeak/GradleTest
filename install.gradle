@@ -328,7 +328,7 @@ task forceUpdateCQT() {
 
 task uninstallCQT() {
     doLast {
-        logInfo "卸载中..."
+        logInfo "👻卸载中..."
         uninstallCQT()
         logSuccess "✅卸载成功"
     }
