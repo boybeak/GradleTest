@@ -47,6 +47,7 @@ ext {
 
     resCheckerFile = new File(gitRoot, "cli/res-checker.jar")
     detektDir = new File(gitRoot, "detekt")
+    detektCliFile = new File(detektDir, "bin/detekt-cli")
     detektConfigDir= new File(detektDir, "config")
     baselineFile = new File(detektConfigDir, "baseline.xml")
     toolsZipFile = new File(gitRoot, "tools.zip")
@@ -253,11 +254,36 @@ ext {
         if (postUpdateFile.exists()) {
             postUpdateFile.setExecutable(true, false)
         }
+        if (detektCliFile.exists()) {
+            detektCliFile.setExecutable(true, false)
+        }
         if (createBaselineFile.exists()) {
             createBaselineFile.setExecutable(true, false)
         }
         if (resCheckerFile.exists()) {
             resCheckerFile.setExecutable(true, false)
+        }
+
+        logSuccess "👩🏻‍🍳开始初始化..."
+        if (!baselineFile.exists()) {
+            detektConfigDir.mkdirs()
+            exec {
+                workingDir repositoryRootDir.absolutePath
+                commandLine './.git/detekt/bin/detekt-cli',
+                        '--input', './',
+                        '--excludes', '"**/test/**,**/androidTest/**,**/build/**"',
+                        '--config', './.git/detekt/config/detekt.yml',
+                        '--baseline', "${baselineFile.absolutePath}",
+                        '--parallel',
+                        '--create-baseline'
+                ignoreExitValue = true
+            }
+
+        }
+        if (baselineFile.exists()) {
+            logSuccess "✅初始化成功"
+        } else {
+            logError "❎初始化失败"
         }
     }
     installCQT = { Boolean force = false ->
@@ -286,26 +312,6 @@ ext {
         logInfo "🔛开始解压到目标路径..."
         unzipInstall(tempZip)
         logSuccess "✅安装成功, 开始初始化..."
-        if (!baselineFile.exists()) {
-            detektConfigDir.mkdirs()
-            exec {
-                workingDir repositoryRootDir.absolutePath
-                commandLine './.git/detekt/bin/detekt-cli',
-                        '--input', "${project.projectDir.absolutePath}/",
-                        '--excludes', '"**/test/**,**/androidTest/**,**/build/**"',
-                        '--config', './.git/detekt/config/detekt.yml',
-                        '--baseline', "${baselineFile.absolutePath}",
-                        '--parallel',
-                        '--create-baseline'
-                ignoreExitValue = true
-            }
-
-        }
-        if (baselineFile.exists()) {
-            logSuccess "✅初始化成功"
-        } else {
-            logError "❎初始化失败"
-        }
 
         Files.copy(tempZip.toPath(), toolsZipFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
